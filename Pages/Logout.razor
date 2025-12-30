@@ -1,0 +1,23 @@
+@page "/logout"
+@using EyeHospitalPOS.Helper
+@inject LoginManager LoginManager
+@inject NavigationManager Navigation
+@inject EyeHospitalPOS.Services.CustomAuthenticationStateProvider AuthProvider
+
+@code {
+    private bool hasNavigated = false;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !hasNavigated)
+        {
+            hasNavigated = true;
+            // Clear user session from memory and session storage
+            await LoginManager.LogoutAsync();
+            AuthProvider.NotifyUserLogout();
+
+            // Redirect to login
+            Navigation.NavigateTo("/login", true);
+        }
+    }
+}

@@ -1,0 +1,284 @@
+@page "/product"
+@using EyeHospitalPOS.Controllers
+@using EyeHospitalPOS.Models
+@using EyeHospitalPOS.Helper
+@using EyeHospitalPOS.Data
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext DbContext
+@inject ProductController ProductController
+@inject LoginManager LoginManager
+@inject NavigationManager Navigation
+
+<PageTitle>Products - Eye Hospital POS</PageTitle>
+
+@if (LoginManager.CurrentUser == null)
+{
+    <div class="alert alert-warning m-4">Please login to access this page.</div>
+}
+else
+{
+    <div class="page-container p-4">
+        <!-- Unified Header -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+             <div>
+                <h3 class="mb-1 fw-bold">Products</h3>
+                <p class="text-muted tiny mb-0">Manage your ophthalmic inventory and pricing</p>
+             </div>
+             <DxButton Text="Add New Product"
+                       RenderStyle="ButtonRenderStyle.Primary"
+                       IconCssClass="fa-solid fa-plus"
+                       CssClass="premium-btn"
+                       Click="@OnAddNewClick" />
+        </div>
+
+        <div class="premium-card overflow-hidden">
+             <!-- Unified Search & Filter Toolbar -->
+             <div class="d-flex justify-content-between align-items-center p-3 border-bottom bg-light">
+                  <div class="d-flex align-items-center flex-grow-1">
+                        <div class="search-box-wrapper d-flex align-items-center bg-white border rounded px-3 me-3" style="height: 40px; min-width: 320px;">
+                            <span class="fa-solid fa-magnifying-glass text-muted me-2"></span>
+                            <input type="text" @bind-value="SearchText" @bind-value:event="oninput" 
+                                   placeholder="Search by name or barcode..." 
+                                   class="border-0 w-100 bg-transparent" style="outline: none; font-size: 0.9rem;" />
+                        </div>
+                  </div>
+                  
+                  <div class="filter-group d-flex align-items-center">
+                        <span class="text-muted me-2 tiny fw-bold text-uppercase">Status</span>
+                        <select class="form-select form-select-sm" @bind="StatusFilter" style="width: 140px; border-radius: 8px;">
+                            <option value="All">All Status</option>
+                            <option value="Active">Active Only</option>
+                            <option value="Inactive">Inactive Only</option>
+                        </select>
+                  </div>
+             </div>
+
+            <div class="card-body p-0">
+                @if (showError)
+                {
+                    <div class="alert alert-danger mx-3 mt-3">@errorMessage</div>
+                }
+
+                <DxGrid @ref="Grid"
+                        Data="@FilteredProducts"
+                        ShowFilterRow="false"
+                        PageSize="20"
+                        CssClass="enterprise-grid"
+                        EditMode="GridEditMode.PopupEditForm"
+                        PopupEditFormHeaderText="Product Information"
+                        EditModelSaving="OnEditModelSaving"
+                        DataItemDeleting="OnDataItemDeleting">
+                    <Columns>
+                        <DxGridCommandColumn Width="120px" />
+                        <DxGridDataColumn FieldName="Name" Caption="Product Name" MinWidth="200">
+                             <CellDisplayTemplate>
+                                <div class="d-flex align-items-center">
+                                    <div class="bg-light rounded p-2 me-3" style="width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;">
+                                        <i class="fa-solid fa-box-open text-primary"></i>
+                                    </div>
+                                    <span class="fw-bold">@context.Value</span>
+                                </div>
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="Barcode" Caption="Barcode" Width="120px" />
+                        <DxGridDataColumn FieldName="Category.Name" Caption="Category" Width="150px" />
+                        <DxGridDataColumn FieldName="Type.Name" Caption="Type" Width="120px" />
+                        <DxGridDataColumn FieldName="CostPrice" Caption="Cost" Width="100px">
+                            <CellDisplayTemplate>
+                                <span>@(((decimal)context.Value).ToString("C2"))</span>
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="SalePrice" Caption="Price" Width="100px">
+                            <CellDisplayTemplate>
+                                <span>@(((decimal)context.Value).ToString("C2"))</span>
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="StockQuantity" Caption="Stock" Width="100px" HeaderCssClass="text-center" CssClass="text-center">
+                            <CellDisplayTemplate>
+                                <span class='fw-bold @((int)context.Value < 10 ? "text-danger" : "text-dark")'>
+                                    @context.Value
+                                </span>
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="IsActive" Caption="Status" Width="120px" HeaderCssClass="text-center" CssClass="text-center">
+                            <CellDisplayTemplate>
+                                <span class='trend-badge @((bool)context.Value ? "positive" : "negative")' style="min-width: 70px; justify-content: center;">
+                                    @((bool)context.Value ? "Active" : "Inactive")
+                                </span>
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                    </Columns>
+                    <EditFormTemplate Context="EditContext">
+                        @{
+                            var product = (Product)EditContext.EditModel;
+                        }
+                        <div class="p-4 bg-white">
+                            <div class="mb-4 border-bottom pb-2">
+                                <h5 class="mb-0 fw-bold" style="color: var(--primary-color);">
+                                    <i class="fa-solid fa-box-open me-2"></i>Product Details
+                                </h5>
+                            </div>
+                            
+                            <div class="row g-4">
+                                <div class="col-md-6">
+                                    <label class="form-label tiny fw-bold text-uppercase text-muted">Product Name</label>
+                                    <DxTextBox @bind-Text="@product.Name" Width="100%" />
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label tiny fw-bold text-uppercase text-muted">Barcode</label>
+                                    <DxTextBox @bind-Text="@product.Barcode" Width="100%" />
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label tiny fw-bold text-uppercase text-muted">Category</label>
+                                    <DxComboBox Data="@categories" 
+                                                @bind-Value="@product.CategoryId"
+                                                ValueFieldName="Id"
+                                                TextFieldName="Name"
+                                                Width="100%" />
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label tiny fw-bold text-uppercase text-muted">Type</label>
+                                    <DxComboBox Data="@types" 
+                                                @bind-Value="@product.TypeId"
+                                                ValueFieldName="Id"
+                                                TextFieldName="Name"
+                                                Width="100%" />
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label tiny fw-bold text-uppercase text-muted">Supplier</label>
+                                    <DxComboBox Data="@suppliers" 
+                                                @bind-Value="@product.SupplierId"
+                                                ValueFieldName="Id"
+                                                TextFieldName="Name"
+                                                Width="100%" />
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label tiny fw-bold text-uppercase text-muted">Cost Price</label>
+                                    <DxSpinEdit @bind-Value="@product.CostPrice" DisplayFormat="C2" Width="100%" />
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label tiny fw-bold text-uppercase text-muted">Sale Price</label>
+                                    <DxSpinEdit @bind-Value="@product.SalePrice" DisplayFormat="C2" Width="100%" />
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label tiny fw-bold text-uppercase text-muted">Stock Quantity</label>
+                                    <DxSpinEdit @bind-Value="@product.StockQuantity" Width="100%" />
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label tiny fw-bold text-uppercase text-muted">Reorder Level</label>
+                                    <DxSpinEdit @bind-Value="@product.ReorderLevel" Width="100%" />
+                                </div>
+                                <div class="col-12 mt-4 pt-3 border-top">
+                                    <DxCheckBox @bind-Checked="@product.IsActive">
+                                        <span class="tiny fw-bold text-muted">Active Product Status</span>
+                                    </DxCheckBox>
+                                </div>
+                            </div>
+                        </div>
+                    </EditFormTemplate>
+                </DxGrid>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Product> products = new List<Product>();
+    private List<ProductCategory> categories = new List<ProductCategory>();
+    private List<ProductType> types = new List<ProductType>();
+    private List<Supplier> suppliers = new List<Supplier>();
+    private IGrid Grid { get; set; }
+    private bool showError = false;
+    private string errorMessage = string.Empty;
+    private string SearchText { get; set; } = string.Empty;
+    private string StatusFilter { get; set; } = "All";
+
+    private IEnumerable<Product> FilteredProducts => products
+        .Where(p => (string.IsNullOrEmpty(SearchText) || 
+                    (p.Name?.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ?? false) || 
+                    (p.Barcode?.Contains(SearchText) ?? false)) &&
+                    (StatusFilter == "All" || 
+                     (StatusFilter == "Active" && p.IsActive) ||
+                     (StatusFilter == "Inactive" && !p.IsActive)));
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (LoginManager.CurrentUser == null)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        await LoadProducts();
+        await LoadLookupData();
+    }
+
+    private async Task LoadProducts()
+    {
+        products = await DbContext.Products
+            .Include(p => p.Category)
+            .Include(p => p.Type)
+            .Include(p => p.Supplier)
+            .OrderByDescending(p => p.Id)
+            .ToListAsync();
+    }
+
+    private async Task LoadLookupData()
+    {
+        categories = await DbContext.ProductCategories.ToListAsync();
+        types = await DbContext.ProductTypes.ToListAsync();
+        suppliers = await DbContext.Suppliers.ToListAsync();
+    }
+
+    private async Task OnAddNewClick()
+    {
+        await Grid.StartEditNewRowAsync();
+    }
+
+    private async Task OnEditModelSaving(GridEditModelSavingEventArgs e)
+    {
+        try
+        {
+            var editModel = (Product)e.EditModel;
+            var dataItem = (Product)e.DataItem;
+
+            if (e.IsNew)
+            {
+                await DbContext.Products.AddAsync(editModel);
+            }
+            else
+            {
+                DbContext.Entry(dataItem).CurrentValues.SetValues(editModel);
+            }
+
+            await DbContext.SaveChangesAsync();
+            await LoadProducts();
+            showError = false;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Error saving product: " + ex.Message;
+            showError = true;
+            e.Cancel = true;
+        }
+    }
+
+    private async Task OnDataItemDeleting(GridDataItemDeletingEventArgs e)
+    {
+        try
+        {
+            var dataItem = (Product)e.DataItem;
+            DbContext.Products.Remove(dataItem);
+            await DbContext.SaveChangesAsync();
+            await LoadProducts();
+            showError = false;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Error deleting product: " + ex.Message;
+            showError = true;
+            e.Cancel = true;
+        }
+    }
+}
+

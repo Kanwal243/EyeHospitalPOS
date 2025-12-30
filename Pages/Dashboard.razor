@@ -1,0 +1,83 @@
+@page "/dashboard"
+@using EyeHospitalPOS.Controllers
+@using EyeHospitalPOS.Helper
+@using EyeHospitalPOS.Models
+@using Microsoft.EntityFrameworkCore
+@using System.Drawing
+@inject DashboardController DashboardController
+@inject LoginManager LoginManager
+@inject NavigationManager Navigation
+
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+
+<PageTitle>Dashboard - EyeCare POS</PageTitle>
+
+<AuthorizeView>
+    <Authorized>
+        <div class="dashboard-container">
+            <div class="row g-4">
+            <!-- Customers Card -->
+            <div class="col-md-6 col-lg-3">
+                <div class="premium-card h-100">
+                    <div class="card-body p-4">
+                        <div class="d-flex align-items-center">
+                            <div class="icon-circle bg-light me-3">
+                                <i class="fa-solid fa-users text-muted"></i>
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span class="card-label">Customers</span>
+                                    <span class="trend-badge positive">
+                                        <i class="fa-solid fa-plus tiny me-1"></i> 11.01%
+                                    </span>
+                                </div>
+                                <h2 class="card-value mb-0">@data.CustomerCount.ToString("")</h2>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Orders Card -->
+            <div class="col-md-6 col-lg-3">
+                <div class="premium-card h-100">
+                    <div class="card-body p-4">
+                        <div class="d-flex align-items-center">
+                            <div class="icon-circle bg-light me-3">
+                                <i class="fa-solid fa-box text-muted"></i>
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span class="card-label">Orders</span>
+                                    <span class="trend-badge negative">
+                                        <i class="fa-solid fa-minus tiny me-1"></i> 9.05%
+                                    </span>
+                                </div>
+                                <h2 class="card-value mb-0">@data.TotalOrders.ToString("")</h2>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            </div>
+        </div>
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    private DashboardData data = new DashboardData();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDashboardData();
+    }
+
+    private async Task LoadDashboardData()
+    {
+        data = await DashboardController.LoadDashboardDataAsync();
+    }
+
+    private string FormatCurrency(decimal value)
+    {
+        return value.ToString("C0", System.Globalization.CultureInfo.CreateSpecificCulture("en-IN"));
+    }
+}
