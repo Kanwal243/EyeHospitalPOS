@@ -54,6 +54,12 @@ namespace EyeHospitalPOS.Services
                 .FirstOrDefaultAsync(p => p.Barcode == barcode && p.IsActive);
         }
 
+        public async Task<bool> BarcodeExistsAsync(string barcode)
+        {
+            return await _context.Products
+                .AnyAsync(p => p.Barcode == barcode && p.IsActive);
+        }
+
         public async Task<List<Product>> SearchProductsAsync(string searchTerm)
         {
             return await _context.Products

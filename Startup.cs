@@ -1,25 +1,17 @@
 ﻿using EyeHospitalPOS.Data;
-using EyeHospitalPOS.Models;
 using EyeHospitalPOS.Interfaces;
 using EyeHospitalPOS.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.HttpsPolicy;
-/*using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Identity.UI;*/
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.OpenApi.Models;
-using Microsoft.OpenApi;
+using System;
+using System.Text;
 
 namespace EyeHospitalPOS
 {
@@ -32,21 +24,11 @@ namespace EyeHospitalPOS
 
         public IConfiguration Configuration { get; }
 
-        // This method gets called by the runtime. Use this method to add services to the container.
-        // For more information on how to configure your application, visit https://go.microsoft.com/fwlink/?LinkID=398940
         public void ConfigureServices(IServiceCollection services)
         {
-            // DbContext - Using SQL Server
+            // DbContext
             services.AddDbContext<ApplicationDbContext>(options =>
                 options.UseSqlServer(Configuration.GetConnectionString("DefaultConnection")));
-
-            // Identity
-            /*services.AddDefaultIdentity<IdentityUser>(options => options.SignIn.RequireConfirmedAccount = true)
-                .AddEntityFrameworkStores<ApplicationDbContext>();*/
-
-    //        services.AddDefaultIdentity<ApplicationUser>(options => options.SignIn.RequireConfirmedAccount = true)
-    //.AddEntityFrameworkStores<ApplicationDbContext>();
-
 
             // Blazor services
             services.AddRazorPages();
@@ -55,7 +37,22 @@ namespace EyeHospitalPOS
                 options.Filters.Add(new Microsoft.AspNetCore.Mvc.AutoValidateAntiforgeryTokenAttribute());
             });
             services.AddServerSideBlazor();
+            services.AddHttpClient("LocalApi", client =>
+            {
+                client.BaseAddress = new Uri("https://localhost:7146/"); // Update port if needed
+            });
+            services.AddScoped(sp => sp.GetRequiredService<IHttpClientFactory>().CreateClient("LocalApi"));
             services.AddDevExpressBlazor(configure => configure.BootstrapVersion = DevExpress.Blazor.BootstrapVersion.v5);
+
+            // Session Services
+            services.AddDistributedMemoryCache();
+            services.AddSession(options =>
+            {
+                options.IdleTimeout = TimeSpan.FromMinutes(30);
+                options.Cookie.HttpOnly = true;
+                options.Cookie.IsEssential = true;
+            });
+            services.AddHttpContextAccessor();
 
             // Custom AuthenticationStateProvider using LoginManager
             services.AddScoped<CustomAuthenticationStateProvider>();
@@ -64,31 +61,29 @@ namespace EyeHospitalPOS
             // Developer exception page
             services.AddDatabaseDeveloperPageExceptionFilter();
 
-            // Your other services
-            services.AddSingleton<WeatherForecastService>();
-
-            // ✅ Register LoginManager for DI
+            // Register LoginManager
             services.AddScoped<EyeHospitalPOS.Helper.LoginManager>();
 
-            // ✅ Register Business Services
+            // Register Business Services
             services.AddScoped<IAuthService, AuthService>();
             services.AddScoped<IProductService, ProductService>();
             services.AddScoped<ISalesService, SalesService>();
             services.AddScoped<IInventoryService, InventoryService>();
             services.AddScoped<IPurchaseOrderService, PurchaseOrderService>();
             services.AddScoped<IUserService, UserService>();
+            services.AddScoped<BarcodeService>();
 
-            // ✅ Register Controllers
+            // Register Controllers
             services.AddScoped<EyeHospitalPOS.Controllers.LoginController>();
             services.AddScoped<EyeHospitalPOS.Controllers.DashboardController>();
             services.AddScoped<EyeHospitalPOS.Controllers.ProductController>();
             services.AddScoped<EyeHospitalPOS.Controllers.POSController>();
             services.AddScoped<EyeHospitalPOS.Controllers.UserController>();
 
-            // ✅ Register Manual JWT Service
+            // Register JWT Service
             services.AddScoped<IJwtService, JwtService>();
-            
-            // ✅ Add Antiforgery
+
+            // Antiforgery
             services.AddAntiforgery(options =>
             {
                 options.HeaderName = "X-XSRF-TOKEN";
@@ -97,7 +92,7 @@ namespace EyeHospitalPOS
                 options.Cookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.SameAsRequest;
             });
 
-            // Manual JWT Authentication
+            // JWT Authentication
             services.AddAuthentication(options =>
             {
                 options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -108,6 +103,28 @@ namespace EyeHospitalPOS
                 var issuer = Configuration["Jwt:Issuer"];
                 var audience = Configuration["Jwt:Audience"];
 
+                // Validate JWT configuration
+                if (string.IsNullOrWhiteSpace(secretKey))
+                {
+                    throw new InvalidOperationException("JWT SecretKey is not configured in appsettings.json. Please add 'Jwt:SecretKey' configuration.");
+                }
+
+                if (string.IsNullOrWhiteSpace(issuer))
+                {
+                    throw new InvalidOperationException("JWT Issuer is not configured in appsettings.json. Please add 'Jwt:Issuer' configuration.");
+                }
+
+                if (string.IsNullOrWhiteSpace(audience))
+                {
+                    throw new InvalidOperationException("JWT Audience is not configured in appsettings.json. Please add 'Jwt:Audience' configuration.");
+                }
+
+                // Validate SecretKey length (should be at least 32 bytes for HS256)
+                if (Encoding.UTF8.GetByteCount(secretKey) < 32)
+                {
+                    throw new InvalidOperationException("JWT SecretKey must be at least 32 bytes (256 bits) for security. Current key is too short.");
+                }
+
                 options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
                 {
                     ValidateIssuer = true,
@@ -116,7 +133,7 @@ namespace EyeHospitalPOS
                     ValidAudience = audience,
                     ValidateLifetime = true,
                     ValidateIssuerSigningKey = true,
-                    IssuerSigningKey = new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(secretKey)),
+                    IssuerSigningKey = new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
                     ClockSkew = TimeSpan.Zero
                 };
             });
@@ -152,7 +169,6 @@ namespace EyeHospitalPOS
         }
 
 
-        // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
         {
             if (env.IsDevelopment())
@@ -165,7 +181,6 @@ namespace EyeHospitalPOS
             else
             {
                 app.UseExceptionHandler("/Error");
-                // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
                 app.UseHsts();
             }
 
@@ -173,6 +188,8 @@ namespace EyeHospitalPOS
             app.UseStaticFiles();
 
             app.UseRouting();
+            
+            app.UseSession();
 
             app.UseAuthentication();
             app.UseAuthorization();

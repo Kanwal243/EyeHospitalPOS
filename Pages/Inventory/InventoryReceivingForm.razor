@@ -5,6 +5,7 @@
 @using EyeHospitalPOS.Data
 @using EyeHospitalPOS.Helper
 @using Microsoft.EntityFrameworkCore
+@using EyeHospitalPOS.Components
 @inject IInventoryService InventoryService
 @inject IProductService ProductService
 @inject ApplicationDbContext DbContext
@@ -224,13 +225,20 @@ else
 
                         @if (CurrentIR.Status == InventoryStatus.Draft)
                         {
-                            <DxGridDataColumn Width="130px">
+                            <DxGridDataColumn Width="140px">
                                 <HeaderCaptionTemplate>
-                                    <div class="d-flex justify-content-center align-items-center w-100" 
-                                         style="cursor: pointer;" 
-                                         @onclick="@(() => ShowProductModal = true)"
-                                         title="Add New Item">
-                                        <i class="fa-solid fa-circle-plus text-dark" style="font-size: 1.5rem;"></i>
+                                    <div class="d-flex justify-content-center align-items-center w-100 gap-2">
+                                        <DxButton RenderStyle="ButtonRenderStyle.Secondary" 
+                                                  IconCssClass="fa-solid fa-plus" 
+                                                  SizeMode="SizeMode.Small"
+                                                  Click="@(() => ShowProductModal = true)"
+                                                  title="Add New Item manually" />
+                                        
+                                        <DxButton RenderStyle="ButtonRenderStyle.Secondary" 
+                                                  IconCssClass="fa-solid fa-qrcode" 
+                                                  SizeMode="SizeMode.Small"
+                                                  Click="@(() => ShowScannerModal = true)"
+                                                  title="Scan Barcode" />
                                     </div>
                                 </HeaderCaptionTemplate>
                                 <CellDisplayTemplate>
@@ -309,6 +317,9 @@ else
                 </div>
             </BodyContentTemplate>
         </DxPopup>
+        <CameraScannerModal ShowScanner="@ShowScannerModal"
+                            OnProductsScanned="@HandleProductsScanned"
+                            OnScannerClosed="@((val) => ShowScannerModal = val)" />
     </div>
 }
 
@@ -320,6 +331,7 @@ else
     private List<Supplier> Suppliers = new();
     private List<Product> Products = new();
     private bool ShowProductModal = false;
+    private bool ShowScannerModal = false;
     
     // Helper for PurchaseOrderId textbox since it's int?
     private string ConvertPurchaseOrderId
@@ -582,5 +594,18 @@ else
             InventoryStatus.Cancelled => "bg-danger text-white",
             _ => "bg-secondary text-white"
         };
+    }
+
+    private void HandleProductsScanned(List<Product> scannedProducts)
+    {
+        if (scannedProducts == null) return;
+
+        foreach (var product in scannedProducts)
+        {
+            SelectProduct(product);
+        }
+        
+        ShowScannerModal = false;
+        StateHasChanged();
     }
 }

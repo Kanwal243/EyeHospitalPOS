@@ -10,6 +10,7 @@ namespace EyeHospitalPOS.Interfaces
         Task<List<Product>> GetActiveProductsAsync();
         Task<Product?> GetProductByIdAsync(int id);
         Task<Product?> GetProductByBarcodeAsync(string barcode);
+        Task<bool> BarcodeExistsAsync(string barcode);
         Task<List<Product>> SearchProductsAsync(string searchTerm);
         Task<Product> CreateProductAsync(Product product);
         Task<Product> UpdateProductAsync(Product product);

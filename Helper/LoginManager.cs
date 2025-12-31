@@ -2,20 +2,21 @@
 using Microsoft.JSInterop;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
 
 namespace EyeHospitalPOS.Helper
 {
     public class LoginManager
     {
-        private readonly IJSRuntime _jsRuntime;
+        private readonly IHttpContextAccessor _httpContextAccessor;
         private User? _currentUser;
         private string? _authToken;
         private string? _refreshToken;
         private bool _initialized = false;
 
-        public LoginManager(IJSRuntime jsRuntime)
+        public LoginManager(IHttpContextAccessor httpContextAccessor)
         {
-            _jsRuntime = jsRuntime;
+            _httpContextAccessor = httpContextAccessor;
         }
 
         public User? CurrentUser
@@ -41,7 +42,7 @@ namespace EyeHospitalPOS.Helper
         public string GetRoleName() => _currentUser?.Role?.Name ?? "Unknown";
 
         /// <summary>
-        /// Load user from session storage on app start
+        /// Load user from Session on app start
         /// </summary>
         public async Task InitializeAsync()
         {
@@ -49,55 +50,67 @@ namespace EyeHospitalPOS.Helper
             
             try
             {
-                var userJson = await _jsRuntime.InvokeAsync<string>("sessionStorage.getItem", "currentUser");
-                if (!string.IsNullOrEmpty(userJson))
+                var context = _httpContextAccessor.HttpContext;
+                if (context != null && context.Session != null)
                 {
-                    _currentUser = JsonSerializer.Deserialize<User>(userJson, new JsonSerializerOptions
+                    await context.Session.LoadAsync();
+                    
+                    var userJson = context.Session.GetString("currentUser");
+                    if (!string.IsNullOrEmpty(userJson))
                     {
-                        PropertyNameCaseInsensitive = true
-                    });
-                }
+                        _currentUser = JsonSerializer.Deserialize<User>(userJson, new JsonSerializerOptions
+                        {
+                            PropertyNameCaseInsensitive = true
+                        });
+                    }
 
-                _authToken = await _jsRuntime.InvokeAsync<string>("sessionStorage.getItem", "authToken");
-                _refreshToken = await _jsRuntime.InvokeAsync<string>("sessionStorage.getItem", "refreshToken");
+                    _authToken = context.Session.GetString("authToken");
+                    _refreshToken = context.Session.GetString("refreshToken");
+                }
             }
             catch
             {
-                // JS interop not available during prerendering
+                // Session not available
             }
             
             _initialized = true;
         }
 
         /// <summary>
-        /// Save user to session storage after login
+        /// Save user to Session after login
         /// </summary>
         public async Task SaveUserAsync()
         {
             try
             {
-                if (_currentUser != null)
+                var context = _httpContextAccessor.HttpContext;
+                if (context != null && context.Session != null)
                 {
-                    var userJson = JsonSerializer.Serialize(_currentUser, new JsonSerializerOptions
+                    if (_currentUser != null)
                     {
-                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-                    });
-                    await _jsRuntime.InvokeVoidAsync("sessionStorage.setItem", "currentUser", userJson);
-                }
+                        var userJson = JsonSerializer.Serialize(_currentUser, new JsonSerializerOptions
+                        {
+                            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                        });
+                        context.Session.SetString("currentUser", userJson);
+                    }
 
-                if (!string.IsNullOrEmpty(_authToken))
-                {
-                    await _jsRuntime.InvokeVoidAsync("sessionStorage.setItem", "authToken", _authToken);
-                }
+                    if (!string.IsNullOrEmpty(_authToken))
+                    {
+                        context.Session.SetString("authToken", _authToken);
+                    }
 
-                if (!string.IsNullOrEmpty(_refreshToken))
-                {
-                    await _jsRuntime.InvokeVoidAsync("sessionStorage.setItem", "refreshToken", _refreshToken);
+                    if (!string.IsNullOrEmpty(_refreshToken))
+                    {
+                        context.Session.SetString("refreshToken", _refreshToken);
+                    }
+                    
+                    await context.Session.CommitAsync();
                 }
             }
             catch
             {
-                // JS interop not available during prerendering
+                // Session not available
             }
         }
 
@@ -108,15 +121,23 @@ namespace EyeHospitalPOS.Helper
         {
             _currentUser = null;
             _authToken = null;
+            _refreshToken = null;
+
             try
             {
-                await _jsRuntime.InvokeVoidAsync("sessionStorage.removeItem", "currentUser");
-                await _jsRuntime.InvokeVoidAsync("sessionStorage.removeItem", "authToken");
-                await _jsRuntime.InvokeVoidAsync("sessionStorage.removeItem", "refreshToken");
+                var context = _httpContextAccessor.HttpContext;
+                if (context != null && context.Session != null)
+                {
+                    context.Session.Remove("currentUser");
+                    context.Session.Remove("authToken");
+                    context.Session.Remove("refreshToken");
+                    context.Session.Clear(); // Optionally clear all
+                    await context.Session.CommitAsync();
+                }
             }
             catch
             {
-                // JS interop not available during prerendering
+                // Session not available
             }
         }
     }
